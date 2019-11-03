@@ -16,7 +16,7 @@ import java.util.Map;
 import static com.mopub.common.logging.MoPubLog.AdapterLogEvent.CUSTOM;
 
 /**
- * Inneractive Mopub interstitial plugin class
+ * Implements Fyber's interstitial Mopub's custom event class
  */
 public class FyberInterstitialForMopub extends CustomEventInterstitial {
   // Mopub log tag definition

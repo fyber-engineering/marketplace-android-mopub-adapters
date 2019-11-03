@@ -16,6 +16,9 @@ import java.util.Map;
 
 import static com.mopub.common.logging.MoPubLog.AdapterLogEvent.CUSTOM_WITH_THROWABLE;
 
+/**
+ * Fyber's instance of Mopub adapter configuration class
+ */
 public class FyberAdapterConfiguration extends BaseAdapterConfiguration {
     // Definitions
     private static final String TAG = "FyberAdapterConfig";
@@ -44,19 +47,31 @@ public class FyberAdapterConfiguration extends BaseAdapterConfiguration {
     public String getBiddingToken(@NonNull Context context) {
         return null;
     }
-
+    /**
+     * @return the name of Fyber's network
+     */
     @NonNull
     @Override
     public String getMoPubNetworkName() {
         return MOPUB_NETWORK_NAME;
     }
 
+    /**
+     * @return the version of Fyber's SDK
+     */
     @NonNull
     @Override
     public String getNetworkSdkVersion() {
         return InneractiveAdManager.getVersion();
     }
 
+    /**
+     * Called once by the Mopub infra-structure on SDK initialization
+     * Gets Fyber's application id from the given configuration map, and initializes the Fyber SDK
+     * @param context Android's context
+     * @param configuration Key/Value Map of Fyber's configuration
+     * @param listener SDK initialization status listener
+     */
     @Override
     public void initializeNetwork(@NonNull Context context, @Nullable Map<String, String> configuration, @NonNull OnNetworkInitializationFinishedListener listener) {
         Preconditions.checkNotNull(context);

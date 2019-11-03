@@ -17,7 +17,7 @@ import java.util.Map;
 import static com.mopub.common.logging.MoPubLog.AdapterLogEvent.CUSTOM;
 
 /**
- * Inneractive Mopub banner plugin class
+ * Implements Fyber's banner Mopub's custom event class
  */
 public class FyberBannerForMopub extends CustomEventBanner {
   // Mopub log tag definition
