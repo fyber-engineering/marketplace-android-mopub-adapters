@@ -42,6 +42,10 @@ public class FyberRewardedVideoForMopub extends CustomEventRewardedVideo {
 
     @Override
     protected void onInvalidate() {
+        if (mRewardedSpot != null) {
+            mRewardedSpot.destroy();
+            mRewardedSpot = null;
+        }
     }
 
     @Override
@@ -201,8 +205,8 @@ public class FyberRewardedVideoForMopub extends CustomEventRewardedVideo {
                 @Override
                 public void onAdDismissed(InneractiveAdSpot adSpot) {
                     log("onAdDismissed");
-                    MoPubRewardedVideoManager.onRewardedVideoClosed(FyberRewardedVideoForMopub.class, mSpotId);
                     MoPubRewardedVideoManager.onRewardedVideoCompleted(FyberRewardedVideoForMopub.class, mSpotId, mRewarded ? MoPubReward.success(MoPubReward.NO_REWARD_LABEL, MoPubReward.DEFAULT_REWARD_AMOUNT) : MoPubReward.failure());
+                    MoPubRewardedVideoManager.onRewardedVideoClosed(FyberRewardedVideoForMopub.class, mSpotId);
                 }
 
                 /**

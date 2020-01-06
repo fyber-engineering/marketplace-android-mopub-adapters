@@ -291,8 +291,10 @@ public class FyberInterstitialForMopub extends CustomEventInterstitial {
   @Override
   protected void onInvalidate() {
     log("onInvalidate called by Mopub");
-    // We do the cleanup on the event of loadInterstitial.
-    // TODO: What does this remark actually say?
+    if (mInterstitialSpot != null) {
+      mInterstitialSpot.destroy();
+      mInterstitialSpot = null;
+    }
   }
 
   /**
