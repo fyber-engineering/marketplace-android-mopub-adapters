@@ -1,3 +1,18 @@
+/** Copyright 2020 Fyber N.V.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+ http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License
+ */
+
 package com.fyber.mediation.mopub;
 
 import android.app.Activity;
@@ -17,7 +32,9 @@ import java.util.Map;
 
 import static com.mopub.common.logging.MoPubLog.AdapterLogEvent.CUSTOM;
 
-// Tested with Inneractive SDK 7.0.0
+/**
+ * Implements Fyber's rewarded video Mopub's custom event class
+ */
 public class FyberRewardedVideoForMopub extends CustomEventRewardedVideo {
     // Mopub log tag definition
     private final static String LOG_TAG = "FyberRewardedVideoForMopub";
@@ -30,11 +47,19 @@ public class FyberRewardedVideoForMopub extends CustomEventRewardedVideo {
     Activity mParentActivity;
     private boolean mRewarded = false;
 
+    /**
+     * Not implemented. The Fyber SDK listens to lifecycle events internally
+     * @return
+     */
     @Override
     protected LifecycleListener getLifecycleListener() {
         return null;
     }
 
+    /**
+     * Returns Fyber's spot id, as a unique identifier for the ad network id
+     * @return
+     */
     @Override
     protected String getAdNetworkId() {
         return mSpotId;
@@ -48,17 +73,32 @@ public class FyberRewardedVideoForMopub extends CustomEventRewardedVideo {
         }
     }
 
+    /**
+     * Not implemented. Called by Mopub in order to initialize the SDK.
+     * The Fyber SDK should be implemented via the adapter configuration class {@link FyberAdapterConfiguration}
+     * @param launcherActivity
+     * @param localExtras
+     * @param serverExtras
+     * @return
+     * @throws Exception
+     */
     @Override
     protected boolean checkAndInitializeSdk(@NonNull Activity launcherActivity,
             @NonNull Map<String, Object> localExtras,
             @NonNull Map<String, String> serverExtras)
             throws Exception {
 
-        // TODO: Nothing to do here. The SDK is initialized in the Sample's main activity. Is this the right way to go?
-
         return true;
     }
 
+    /**
+     * Called in order to load a rewarded video ad. The Spot and app id, should be defined within on the mopub console
+     * In order to get them via the serverExtras parameter
+     * @param activity parent activity
+     * @param localExtras support the keys which are defined in {@link InneractiveMediationDefs}
+     * @param serverExtras should be populate with app and spot ids
+     * @throws Exception
+     */
     @Override
     protected void loadWithSdkInitialized(@NonNull Activity activity,
             @NonNull Map<String, Object> localExtras,
@@ -184,11 +224,18 @@ public class FyberRewardedVideoForMopub extends CustomEventRewardedVideo {
         mParentActivity = activity;
     }
 
+    /**
+     * Called by Mopub, in order to check if there is a rewarded ad ready for display
+     * @return
+     */
     @Override
     protected boolean hasVideoAvailable() {
         return mRewardedSpot != null && mRewardedSpot.isReady();
     }
 
+    /**
+     * Called by Mopub in order to show a standalone activity of a rewarded video ad
+     */
     @Override
     protected void showVideo() {
         log("showVideo called for rewarded");

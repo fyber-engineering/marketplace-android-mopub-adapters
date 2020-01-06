@@ -1,3 +1,18 @@
+/** Copyright 2020 Fyber N.V.
+
+ Licensed under the Apache License, Version 2.0 (the "License");
+ you may not use this file except in compliance with the License.
+ You may obtain a copy of the License at
+
+ http://www.apache.org/licenses/LICENSE-2.0
+
+ Unless required by applicable law or agreed to in writing, software
+ distributed under the License is distributed on an "AS IS" BASIS,
+ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ See the License for the specific language governing permissions and
+ limitations under the License
+ */
+
 package com.fyber.mediation.mopub;
 
 import android.content.Context;
@@ -16,6 +31,9 @@ import java.util.Map;
 
 import static com.mopub.common.logging.MoPubLog.AdapterLogEvent.CUSTOM_WITH_THROWABLE;
 
+/**
+ * Fyber's instance of Mopub adapter configuration class
+ */
 public class FyberAdapterConfiguration extends BaseAdapterConfiguration {
     // Definitions
     private static final String TAG = "FyberAdapterConfig";
@@ -44,19 +62,31 @@ public class FyberAdapterConfiguration extends BaseAdapterConfiguration {
     public String getBiddingToken(@NonNull Context context) {
         return null;
     }
-
+    /**
+     * @return the name of Fyber's network
+     */
     @NonNull
     @Override
     public String getMoPubNetworkName() {
         return MOPUB_NETWORK_NAME;
     }
 
+    /**
+     * @return the version of Fyber's SDK
+     */
     @NonNull
     @Override
     public String getNetworkSdkVersion() {
         return InneractiveAdManager.getVersion();
     }
 
+    /**
+     * Called once by the Mopub infra-structure on SDK initialization
+     * Gets Fyber's application id from the given configuration map, and initializes the Fyber SDK
+     * @param context Android's context
+     * @param configuration Key/Value Map of Fyber's configuration
+     * @param listener SDK initialization status listener
+     */
     @Override
     public void initializeNetwork(@NonNull Context context, @Nullable Map<String, String> configuration, @NonNull OnNetworkInitializationFinishedListener listener) {
         Preconditions.checkNotNull(context);
