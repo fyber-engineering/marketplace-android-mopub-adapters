@@ -18,18 +18,26 @@ package com.fyber.mediation.mopub;
 import android.content.Context;
 import android.text.TextUtils;
 import android.util.Log;
+
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+
 import com.fyber.inneractive.sdk.external.InneractiveAdManager;
+import com.fyber.inneractive.sdk.external.InneractiveAdRequest;
+import com.fyber.inneractive.sdk.external.InneractiveUserConfig;
+import com.fyber.inneractive.sdk.external.OnFyberMarketplaceInitializedListener;
 import com.mopub.common.BaseAdapterConfiguration;
+import com.mopub.common.MoPub;
 import com.mopub.common.OnNetworkInitializationFinishedListener;
 import com.mopub.common.Preconditions;
 import com.mopub.common.logging.MoPubLog;
+import com.mopub.common.privacy.ConsentStatus;
+import com.mopub.common.privacy.PersonalInfoManager;
 import com.mopub.mobileads.MoPubErrorCode;
 
 import java.util.Map;
 
-import static com.mopub.common.logging.MoPubLog.AdapterLogEvent.CUSTOM_WITH_THROWABLE;
+import static com.mopub.common.logging.MoPubLog.AdapterLogEvent.CUSTOM;
 
 /**
  * Fyber's instance of Mopub adapter configuration class
@@ -88,16 +96,32 @@ public class FyberAdapterConfiguration extends BaseAdapterConfiguration {
      * @param listener SDK initialization status listener
      */
     @Override
-    public void initializeNetwork(@NonNull Context context, @Nullable Map<String, String> configuration, @NonNull OnNetworkInitializationFinishedListener listener) {
+    public void initializeNetwork(@NonNull Context context, @Nullable Map<String, String> configuration, @NonNull
+    final OnNetworkInitializationFinishedListener listener) {
         Preconditions.checkNotNull(context);
 
         if (configuration != null) {
-            String appId = configuration.get(KEY_FYBER_APP_ID);
+            final String appId = configuration.get(KEY_FYBER_APP_ID);
             if (!TextUtils.isEmpty(appId)) {
-                if (initializeFyberMarketplace(context, appId, configuration.containsKey(KEY_FYBER_DEBUG)) && listener != null) {
-                    listener.onNetworkInitializationFinished(FyberAdapterConfiguration.class, MoPubErrorCode.ADAPTER_INITIALIZATION_SUCCESS);
-                    /** Note: Do not report {@link MoPubErrorCode.ADAPTER_CONFIGURATION_ERROR} because the adapter may still be initialized from custom event classes */
-                }
+                initializeFyberMarketplace(context, appId,
+                                           configuration.containsKey(KEY_FYBER_DEBUG),
+                                           new OnFyberAdapterConfigurationResolvedListener() {
+                                               @Override public void onFyberAdapterConfigurationResolved(
+                                                       OnFyberMarketplaceInitializedListener.FyberInitStatus status) {
+                                                   //note - we try to load ads when "FAILED" because an ad request will re-attempt to initialize the relevant parts of the SDK.
+                                                   if (status ==
+                                                       OnFyberMarketplaceInitializedListener.FyberInitStatus.SUCCESSFULLY ||
+                                                           status ==
+                                                                   OnFyberMarketplaceInitializedListener.FyberInitStatus.FAILED) {
+                                                       listener.onNetworkInitializationFinished(FyberAdapterConfiguration.class, MoPubErrorCode.ADAPTER_INITIALIZATION_SUCCESS);
+                                                   } else if (status == OnFyberMarketplaceInitializedListener.FyberInitStatus.INVALID_APP_ID) {
+                                                       log("Attempted to initialize Fyber MarketPlace with wrong app id - " + appId);
+                                                       listener.onNetworkInitializationFinished(FyberAdapterConfiguration.class, MoPubErrorCode.ADAPTER_CONFIGURATION_ERROR);
+                                                   } else {
+                                                       listener.onNetworkInitializationFinished(FyberAdapterConfiguration.class, MoPubErrorCode.ADAPTER_CONFIGURATION_ERROR);
+                                                   }
+                                               }
+                                           });
             } else {
                 Log.d(TAG, "No Fyber app id given in configuration object. Initialization postponed. You can use FyberAdapterConfiguration.KEY_FYBER_APP_ID as your configuration key");
 
@@ -113,30 +137,150 @@ public class FyberAdapterConfiguration extends BaseAdapterConfiguration {
      * @param debugMode if set to true, runs Fyber Marketplace with debug logs
      * @return true if initialized successfully. false otherwise
      */
-    public static boolean initializeFyberMarketplace(Context context, String appId, boolean debugMode) {
+    public static void initializeFyberMarketplace(Context context, String appId, boolean debugMode, @NonNull
+    final OnFyberAdapterConfigurationResolvedListener listener) {
         synchronized (FyberAdapterConfiguration.class) {
             // Just to be on the safe side, wrap initialize with exception handling
-            try {
-                if (debugMode) {
-                    InneractiveAdManager.setLogLevel(Log.VERBOSE);
-                }
+            if (debugMode) {
+                InneractiveAdManager.setLogLevel(Log.VERBOSE);
+            }
 
-                if (InneractiveAdManager.wasInitialized() == false) {
-                    InneractiveAdManager.initialize(context, appId);
-                } else if (appId.equals(InneractiveAdManager.getAppId()) == false) {
-                    Log.w(TAG, "Fyber marketplace was initialized with appId " + InneractiveAdManager.getAppId() +
-                            " and now requests initialization with another appId (" + appId + ") You may have configured the wrong appId on the Mopub console?\n" +
-                            " you can only use a single appId and its related spots");
+            if (!InneractiveAdManager.wasInitialized()) {
+                InneractiveAdManager.initialize(context, appId,
+                                                new OnFyberMarketplaceInitializedListener() {
+                                                    @Override public void onFyberMarketplaceInitialized(
+                                                            FyberInitStatus status) {
+                                                        listener.onFyberAdapterConfigurationResolved(status);
+                                                    }
+                                                });
+            } else if (!appId.equals(InneractiveAdManager.getAppId())) {
+                Log.w(TAG, "Fyber marketplace was initialized with appId " + InneractiveAdManager.getAppId() +
+                        " and now requests initialization with another appId (" + appId + ") You may have configured the wrong appId on the Mopub console?\n" +
+                        " you can only use a single appId and its related spots");
+                listener.onFyberAdapterConfigurationResolved(
+                        OnFyberMarketplaceInitializedListener.FyberInitStatus.INVALID_APP_ID);
+            } else {
+                listener.onFyberAdapterConfigurationResolved(
+                        OnFyberMarketplaceInitializedListener.FyberInitStatus.SUCCESSFULLY);
+            }
 
-                    return false;
-                }
+        }
+    }
 
-                return true;
-            } catch (Exception e) {
-                MoPubLog.log(CUSTOM_WITH_THROWABLE, "Initializing Fyber has encountered " + "an exception.", e);
+    /**
+     * An helper for getting the current consent status from Mopub. Called before each load request
+     */
+    public static void updateGdprConsentStatusFromMopub() {
+        InneractiveAdManager.GdprConsentSource gdprConsentSource = InneractiveAdManager.getGdprStatusSource();
+        if (gdprConsentSource == null || gdprConsentSource == InneractiveAdManager.GdprConsentSource.External) {
+            Boolean mopubGdpr = extractGdprFromMopub();
+            if (mopubGdpr == null) {
+                InneractiveAdManager.clearGdprConsentData();
+            } else {
+                InneractiveAdManager.setGdprConsent(mopubGdpr, InneractiveAdManager.GdprConsentSource.External);
             }
         }
 
-        return false;
+    }
+
+    /**
+     * An helper for getting the current consent status from Mopub. Called before each load request
+     */
+    private static Boolean extractGdprFromMopub() {
+        PersonalInfoManager personalInfoManager = MoPub.getPersonalInformationManager();
+        if (personalInfoManager != null) {
+            Boolean gdprApplies = personalInfoManager.gdprApplies();
+            // Only set the GDPR consent flag, if GDPR is applied. If GDPR is not applied, canCollectPersonalInformation returns true, but there is no explicit consent
+            if (gdprApplies != null && gdprApplies) {
+                log("Fyber sdk will user gdpr consent from mopub. GdprConsent- " + personalInfoManager.canCollectPersonalInformation());
+                return personalInfoManager.canCollectPersonalInformation();
+            } else if (personalInfoManager.getPersonalInfoConsentStatus() == ConsentStatus.UNKNOWN && MoPub.shouldAllowLegitimateInterest()) {
+                log("Gdpr result from mopub is unkown and publisher allowed liegitmateInterset. GdprConsent - true");
+                return true;
+            } else {
+                log("Fyber sdk has not found any Gdpr values");
+            }
+        }
+        return null;
+    }
+    
+    /**
+     * Internal interface to bridge the gap between the custom event classes and the initializeNetwork part
+     */
+    public interface OnFyberAdapterConfigurationResolvedListener {
+        public void onFyberAdapterConfigurationResolved(
+                OnFyberMarketplaceInitializedListener.FyberInitStatus status);
+    }
+
+    /**
+     * Helper for popupating an ad request with extra params
+     * @param request
+     * @param extras
+     */
+    public static void updateRequestFromExtras(InneractiveAdRequest request, Map<String, String> extras) {
+        String keywords = null;
+        InneractiveUserConfig.Gender gender = null;
+        int age = 0;
+        String zipCode = null;
+        if (extras != null) {
+            if (extras.containsKey(FyberMopubMediationDefs.KEY_KEYWORDS)) {
+                keywords = (String) extras.get(FyberMopubMediationDefs.KEY_KEYWORDS);
+            }
+
+            // Set the age variable as defined on IaMediationActivity class.
+            // in case the variable is not initialized, the variable will not be in use
+
+            if (extras.containsKey(FyberMopubMediationDefs.KEY_AGE)) {
+                try {
+                    age = Integer.valueOf(extras.get(FyberMopubMediationDefs.KEY_AGE));
+                } catch (NumberFormatException e) {
+                    log("local extra contains Invalid Age");
+                }
+            }
+
+            //in case the variable is not initialized, the variable will not be in use
+            if (extras.containsKey(FyberMopubMediationDefs.KEY_ZIPCODE)) {
+                zipCode = (String) extras.get(FyberMopubMediationDefs.KEY_ZIPCODE);
+            }
+
+            // Set the gender variable as defined on IaMediationActivity class.
+            // in case the variable is not initialized, the variable will not be in use
+
+            if (extras.containsKey(FyberMopubMediationDefs.KEY_GENDER)) {
+                String genderStr = extras.get(FyberMopubMediationDefs.KEY_GENDER)    ;
+                if (FyberMopubMediationDefs.GENDER_MALE.equals(genderStr)) {
+                    gender = InneractiveUserConfig.Gender.MALE;
+                } else if (FyberMopubMediationDefs.GENDER_FEMALE.equals(genderStr)) {
+                    gender = InneractiveUserConfig.Gender.FEMALE;
+                }
+            }
+
+            // Populate user configuration
+            InneractiveUserConfig userConfig = new InneractiveUserConfig()
+                    .setZipCode(zipCode);
+
+            if (gender != null) {
+                userConfig.setGender(gender);
+            }
+
+            if (InneractiveUserConfig.ageIsValid(age)) {
+                userConfig.setAge(age);
+            }
+
+            // Set optional parameters for better targeting.
+            request.setUserParams(new InneractiveUserConfig()
+                    .setGender(gender)
+                    .setZipCode(zipCode)
+                    .setAge(age));
+
+            // Populate keywords
+            if (!TextUtils.isEmpty(keywords)) {
+                request.setKeywords(keywords);
+            }
+        }
+    }
+
+    private static void log(String message) {
+        MoPubLog.log(CUSTOM, TAG, message);
     }
 }

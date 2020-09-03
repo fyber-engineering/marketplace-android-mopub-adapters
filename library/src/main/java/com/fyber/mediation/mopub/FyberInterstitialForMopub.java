@@ -1,4 +1,4 @@
-/** Copyright 2020 Fyber N.V.
+/* Copyright 2020 Fyber N.V.
 
  Licensed under the Apache License, Version 2.0 (the "License");
  you may not use this file except in compliance with the License.
@@ -18,14 +18,29 @@ package com.fyber.mediation.mopub;
 import android.app.Activity;
 import android.content.Context;
 import android.text.TextUtils;
-import com.fyber.inneractive.sdk.external.*;
-import com.fyber.inneractive.sdk.external.InneractiveUnitController.AdDisplayError;
-import com.fyber.inneractive.sdk.external.InneractiveUserConfig.Gender;
-import com.mopub.common.MoPub;
-import com.mopub.common.logging.MoPubLog;
-import com.mopub.mobileads.CustomEventInterstitial;
-import com.mopub.mobileads.MoPubErrorCode;
 
+import androidx.annotation.NonNull;
+import androidx.annotation.Nullable;
+
+import com.fyber.inneractive.sdk.external.InneractiveAdManager;
+import com.fyber.inneractive.sdk.external.InneractiveUnitController.AdDisplayError;
+import com.fyber.inneractive.sdk.external.InneractiveAdRequest;
+import com.fyber.inneractive.sdk.external.InneractiveAdSpot;
+import com.fyber.inneractive.sdk.external.InneractiveAdSpotManager;
+import com.fyber.inneractive.sdk.external.InneractiveErrorCode;
+import com.fyber.inneractive.sdk.external.InneractiveFullscreenAdEventsListener;
+import com.fyber.inneractive.sdk.external.InneractiveFullscreenUnitController;
+import com.fyber.inneractive.sdk.external.InneractiveFullscreenVideoContentController;
+import com.fyber.inneractive.sdk.external.InneractiveMediationName;
+import com.fyber.inneractive.sdk.external.OnFyberMarketplaceInitializedListener;
+import com.fyber.inneractive.sdk.external.VideoContentListener;
+import com.mopub.common.LifecycleListener;
+import com.mopub.common.Preconditions;
+import com.mopub.common.logging.MoPubLog;
+import com.mopub.common.MoPub;
+import com.mopub.mobileads.AdData;
+import com.mopub.mobileads.BaseAd;
+import com.mopub.mobileads.MoPubErrorCode;
 import java.util.Map;
 
 import static com.mopub.common.logging.MoPubLog.AdapterLogEvent.CUSTOM;
@@ -33,211 +48,133 @@ import static com.mopub.common.logging.MoPubLog.AdapterLogEvent.CUSTOM;
 /**
  * Implements Fyber's interstitial Mopub's custom event class
  */
-public class FyberInterstitialForMopub extends CustomEventInterstitial {
+public class FyberInterstitialForMopub extends BaseAd {
   // Mopub log tag definition
   private final static String LOG_TAG = "FyberInterstitialForMopub";
 
   // Members
   /**
-   * Inneractived interstitial ad
+   * Fyber's interstitial ad object
    */
   InneractiveAdSpot mInterstitialSpot;
+
+  String mSpotId;
   /**
    * Context for showing the Ad
    */
+  @Nullable
   Context mContext;
-  /**
-   * The plugin fires events into Mopub's callback listener
-   */
-  private CustomEventInterstitialListener customEventListener;
 
-  /**
-   * Called by Mopub in order to start loading an interstitial ad
-   *
-   * @param context Android context
-   * @param listener Mopub's external listener
-   * @param localExtras map of local parameters, which were passed by a call to setLocalExtras
-   * @param serverExtras map of parameters, as defined in the Mopub console
-   */
+  @Nullable
   @Override
-  protected void loadInterstitial(final Context context,
-                                  final CustomEventInterstitialListener listener, Map<String, Object> localExtras,
-                                  Map<String, String> serverExtras) {
+  protected LifecycleListener getLifecycleListener() {
+    return null;
+  }
+
+  @NonNull
+  @Override
+  protected String getAdNetworkId() {
+    return mSpotId;
+  }
+
+  @Override
+  protected boolean checkAndInitializeSdk(@NonNull Activity launcherActivity, @NonNull AdData adData) throws Exception {
+    return false;
+  }
+
+  @Override
+  protected void load(final @NonNull Context context, @NonNull AdData adData) throws Exception {
+    Preconditions.checkNotNull(context);
+    Preconditions.checkNotNull(adData);
 
     log("load interstitial requested");
 
-    customEventListener = listener;
+    mContext = context;
 
     setAutomaticImpressionAndClickTracking(false);
 
-    // Set variables from MoPub console.
-    String appId = null;
-    String spotId = null;
+    final Map<String, String> extras = adData.getExtras();
 
-    if (serverExtras != null) {
-      log("server extras: " + serverExtras);
-      appId = serverExtras.get(FyberMopubMediationDefs.REMOTE_KEY_APP_ID);
-      spotId = serverExtras.get(InneractiveMediationDefs.REMOTE_KEY_SPOT_ID);
-    }
+    // Set variables from MoPub console.
+    final String appId = extras == null ? null : extras.get(FyberMopubMediationDefs.REMOTE_KEY_APP_ID);
+    final String spotId = extras == null ? null : extras.get(FyberMopubMediationDefs.REMOTE_KEY_SPOT_ID);
 
     if (TextUtils.isEmpty(spotId)) {
       log("No spotID defined for ad unit. Cannot load interstitial");
-      customEventListener.onInterstitialFailed(MoPubErrorCode.ADAPTER_CONFIGURATION_ERROR);
+      mLoadListener.onAdLoadFailed(MoPubErrorCode.ADAPTER_CONFIGURATION_ERROR);
       return;
     }
 
+    mSpotId = spotId;
+
     // If we've received an appId for this unit, try initializing the Fyber Marketplace SDK, if it was not already initialized
     if (!TextUtils.isEmpty(appId)) {
-      FyberAdapterConfiguration.initializeFyberMarketplace(context, appId, serverExtras.containsKey(FyberMopubMediationDefs.REMOTE_KEY_DEBUG));
+      FyberAdapterConfiguration.initializeFyberMarketplace(context, appId, extras.containsKey(
+              FyberMopubMediationDefs.REMOTE_KEY_DEBUG),
+              new FyberAdapterConfiguration.OnFyberAdapterConfigurationResolvedListener() {
+                @Override public void onFyberAdapterConfigurationResolved(
+                        OnFyberMarketplaceInitializedListener.FyberInitStatus status) {
+                  //note - we try to load ads when "FAILED" because an ad request will re-attempt to initialize the relevant parts of the SDK.
+                  if (status == OnFyberMarketplaceInitializedListener.FyberInitStatus.SUCCESSFULLY || status == OnFyberMarketplaceInitializedListener.FyberInitStatus.FAILED) {
+                    requestInterstitial(context, spotId, extras);
+                  } else {
+                    mLoadListener.onAdLoadFailed(MoPubErrorCode.ADAPTER_CONFIGURATION_ERROR);
+                  }
+                }
+              });
+    } else if (InneractiveAdManager.wasInitialized()) {
+      requestInterstitial(context, spotId, extras);
+    } else {
+      mLoadListener.onAdLoadFailed(MoPubErrorCode.ADAPTER_CONFIGURATION_ERROR);
     }
-
-    mContext = context;
-
-    Gender gender = null;
-    int age = 0;
-    String zipCode = null;
-    String keywords = null;
-    if (localExtras != null) {
-
-			/* Set keywords variable as defined on MoPub console, you can also define keywords with setlocalExtras in IaMediationActivity class.
-      in case the variable is not initialized, the variable will not be in use */
-      if (localExtras.containsKey(InneractiveMediationDefs.KEY_KEYWORDS)) {
-        keywords = (String) localExtras.get(InneractiveMediationDefs.KEY_KEYWORDS);
-      }
-            
-			/* Set the age variable as defined on IaMediationActivity class.   
-			in case the variable is not initialized, the variable will not be in use */
-      if (localExtras.containsKey(InneractiveMediationDefs.KEY_AGE)) {
-        try {
-          age = Integer.valueOf(localExtras.get(InneractiveMediationDefs.KEY_AGE).toString());
-        } catch (NumberFormatException e) {
-          log("local extra contains Invalid Age");
-        }
-      }
-
-			/* Set the gender variable as defined on IaMediationActivity class.   
-			in case the variable is not initialized, the variable will not be in use */
-      if (localExtras.containsKey(InneractiveMediationDefs.KEY_GENDER)) {
-        String genderStr = localExtras.get(InneractiveMediationDefs.KEY_GENDER).toString();
-        if (genderStr.equals(InneractiveMediationDefs.GENDER_MALE)) {
-          gender = Gender.MALE;
-        } else if (genderStr.equals(InneractiveMediationDefs.GENDER_FEMALE)) {
-          gender = (Gender.FEMALE);
-        }
-      }
-
-			/* Set zipCode variable as defined on IaMediationActivity class.   
-			in case the variable is not initialized, the variable will not be in use */
-      if (localExtras.containsKey(InneractiveMediationDefs.KEY_ZIPCODE)) {
-        zipCode = (String) localExtras.get(InneractiveMediationDefs.KEY_ZIPCODE);
-      }
-    }
-
-    if (mInterstitialSpot != null) {
-      mInterstitialSpot.destroy();
-    }
-
-    mInterstitialSpot = InneractiveAdSpotManager.get().createSpot();
-    // Set your mediation name and version
-    mInterstitialSpot.setMediationName(InneractiveMediationName.MOPUB);
-    mInterstitialSpot.setMediationVersion(MoPub.SDK_VERSION);
-
-    InneractiveFullscreenUnitController fullscreenUnitController = new InneractiveFullscreenUnitController();
-    mInterstitialSpot.addUnitController(fullscreenUnitController);
-
-    InneractiveAdRequest request = new InneractiveAdRequest(spotId);
-    request.setUserParams(new InneractiveUserConfig()
-        .setGender(gender)
-        .setZipCode(zipCode)
-        .setAge(age));
-    if (!TextUtils.isEmpty(keywords)) {
-      request.setKeywords(keywords);
-    }
-
-    // Load ad
-    mInterstitialSpot.setRequestListener(new InneractiveAdSpot.RequestListener() {
-
-      /**
-       * Called by Inneractive when an interstitial is ready for display
-       * @param adSpot Spot object
-       */
-      @Override
-      public void onInneractiveSuccessfulAdRequest(InneractiveAdSpot adSpot) {
-        log("on ad loaded successfully");
-        customEventListener.onInterstitialLoaded();
-      }
-
-      /**
-       * Called by Inneractive an interstitial fails loading
-       * @param adSpot Spot object
-       * @param errorCode the failure's error.
-       */
-      @Override
-      public void onInneractiveFailedAdRequest(InneractiveAdSpot adSpot,
-                                               InneractiveErrorCode errorCode) {
-        log("Failed loading interstitial with error: " + errorCode);
-        if (errorCode == InneractiveErrorCode.CONNECTION_ERROR) {
-          customEventListener.onInterstitialFailed(MoPubErrorCode.NO_CONNECTION);
-        } else if (errorCode == InneractiveErrorCode.CONNECTION_TIMEOUT) {
-          customEventListener.onInterstitialFailed(MoPubErrorCode.NETWORK_TIMEOUT);
-        } else if (errorCode == InneractiveErrorCode.NO_FILL) {
-          customEventListener.onInterstitialFailed(MoPubErrorCode.NO_FILL);
-        } else {
-          customEventListener.onInterstitialFailed(MoPubErrorCode.SERVER_ERROR);
-        }
-      }
-    });
-
-    mInterstitialSpot.requestAd(request);
   }
 
   /**
-   * Called by the Mopub infra-structure in order for the plugin to start showing Inneractive's
-   * interstitial
+   * Called by the Mopub infra-structure in order for the plugin to start showing a Fyber Marketplace interstitial
    */
   @Override
-  protected void showInterstitial() {
-    log("show interstital called");
+  public void show() {
+    log("show interstitial called");
     // check if the ad is ready
     if (mInterstitialSpot != null && mInterstitialSpot.isReady()) {
 
       InneractiveFullscreenUnitController fullscreenUnitController = (InneractiveFullscreenUnitController) mInterstitialSpot
-          .getSelectedUnitController();
+              .getSelectedUnitController();
       fullscreenUnitController.setEventsListener(new InneractiveFullscreenAdEventsListener() {
 
         /**
-         * Called by Inneractive when an interstitial ad activity is closed
+         * Called by Fyber marketplace when an interstitial ad activity is closed
          * @param adSpot Spot object
          */
         @Override
         public void onAdDismissed(InneractiveAdSpot adSpot) {
           log("onAdDismissed");
-          customEventListener.onInterstitialDismissed();
+          mInteractionListener.onAdDismissed();
         }
 
         /**
-         * Called by Inneractive when an interstitial ad activity is shown
+         * Called by Fyber marketplace when an interstitial ad activity is shown
          * @param adSpot Spot object
          */
         @Override
         public void onAdImpression(InneractiveAdSpot adSpot) {
           log("onAdImpression");
-          customEventListener.onInterstitialShown();
-          customEventListener.onInterstitialImpression();
+          mInteractionListener.onAdShown();
+          mInteractionListener.onAdImpression();
         }
 
         /**
-         * Called by Inneractive when an interstitial ad is clicked
+         * Called by Fyber marketplace when an interstitial ad is clicked
          * @param adSpot Spot object
          */
         @Override
         public void onAdClicked(InneractiveAdSpot adSpot) {
           log("onAdClicked");
-          customEventListener.onInterstitialClicked();
+          mInteractionListener.onAdClicked();
         }
 
         /**
-         * Called by Inneractive when an interstitial ad opened an external application
+         * Called by Fyber marketplace when an interstitial ad opened an external application
          * @param adSpot Spot object
          */
         @Override
@@ -256,7 +193,7 @@ public class FyberInterstitialForMopub extends CustomEventInterstitial {
         }
 
         /**
-         * Called by Inneractive when Inneractive's internal browser, which was opened by this interstitial, was closed
+         * Called by Fyber marketplace when Fyber marketplace's internal browser, which was opened by this interstitial, was closed
          * @param adSpot Spot object
          */
         @Override
@@ -275,7 +212,7 @@ public class FyberInterstitialForMopub extends CustomEventInterstitial {
         }
 
         /**
-         * Called by inneractive when an Intersititial video ad was played to the end
+         * Called by Fyber marketplace when an Interstitial video ad was played to the end
          * <br>Can be used for incentive flow
          * <br>Note: This event does not indicate that the interstitial was closed
          */
@@ -295,21 +232,88 @@ public class FyberInterstitialForMopub extends CustomEventInterstitial {
 
       fullscreenUnitController.show((Activity) mContext);
     } else {
+      mInteractionListener.onAdFailed(MoPubErrorCode.EXPIRED);
       log("The Interstitial ad is not ready yet.");
     }
   }
 
+
   /**
    * Called by Mopub when an ad should be destroyed
-   * <br>Destroy the underline Inneractive ad
+   * <br>Destroy the underline Fyber marketplace ad
    */
   @Override
   protected void onInvalidate() {
     log("onInvalidate called by Mopub");
+    // We do the cleanup on the event of loadInterstitial.
     if (mInterstitialSpot != null) {
       mInterstitialSpot.destroy();
       mInterstitialSpot = null;
     }
+  }
+
+  /**
+   * requests an interstitial ad from Fyber Marketplace
+   * @param context
+   * @param spotId
+   * @param localExtras
+   */
+  private void requestInterstitial(final Context context, String spotId, Map<String, String> localExtras) {
+    mContext = context;
+
+    FyberAdapterConfiguration.updateGdprConsentStatusFromMopub();
+
+    if (mInterstitialSpot != null) {
+      mInterstitialSpot.destroy();
+    }
+
+    mInterstitialSpot = InneractiveAdSpotManager.get().createSpot();
+    // Set your mediation name and version
+    mInterstitialSpot.setMediationName(InneractiveMediationName.MOPUB);
+    mInterstitialSpot.setMediationVersion(MoPub.SDK_VERSION);
+
+    InneractiveFullscreenUnitController fullscreenUnitController = new InneractiveFullscreenUnitController();
+    mInterstitialSpot.addUnitController(fullscreenUnitController);
+
+    InneractiveAdRequest request = new InneractiveAdRequest(spotId);
+    FyberAdapterConfiguration.updateRequestFromExtras(request, localExtras);
+
+    // Load ad
+    mInterstitialSpot.setRequestListener(new InneractiveAdSpot.RequestListener() {
+
+      /**
+       * Called by Fyber marketplace when an interstitial is ready for display
+       * @param adSpot Spot object
+       */
+
+      @Override
+      public void onInneractiveSuccessfulAdRequest(InneractiveAdSpot adSpot) {
+        log("on ad loaded successfully");
+        mLoadListener.onAdLoaded();
+      }
+
+      /**
+       * Called by Fyber marketplace when an interstitial fails loading
+       * @param adSpot Spot object
+       * @param errorCode the failure's error.
+       */
+      @Override
+      public void onInneractiveFailedAdRequest(InneractiveAdSpot adSpot,
+                                               InneractiveErrorCode errorCode) {
+        log("Failed loading interstitial with error: " + errorCode);
+        if (errorCode == InneractiveErrorCode.CONNECTION_ERROR) {
+          mLoadListener.onAdLoadFailed(MoPubErrorCode.NO_CONNECTION);
+        } else if (errorCode == InneractiveErrorCode.CONNECTION_TIMEOUT) {
+          mLoadListener.onAdLoadFailed(MoPubErrorCode.NETWORK_TIMEOUT);
+        } else if (errorCode == InneractiveErrorCode.NO_FILL) {
+          mLoadListener.onAdLoadFailed(MoPubErrorCode.NO_FILL);
+        } else {
+          mLoadListener.onAdLoadFailed(MoPubErrorCode.SERVER_ERROR);
+        }
+      }
+    });
+
+    mInterstitialSpot.requestAd(request);
   }
 
   /**

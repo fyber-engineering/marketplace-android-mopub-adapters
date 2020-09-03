@@ -8,8 +8,8 @@ android {
     defaultConfig {
         minSdkVersion 16
         targetSdkVersion 29
-        versionCode 734
-        versionName "7.3.4"
+        versionCode 770
+        versionName "7.7.0"
     }
 
     buildTypes {
@@ -32,10 +32,10 @@ repositories {
     }
 }
 
-def vampVersion = "7.3.4"
+def vampVersion = "7.7.0"
 
 dependencies {
-    compileOnly 'com.mopub:mopub-sdk:5.9.1'
+    compileOnly 'com.mopub:mopub-sdk:5.13.1'
     compileOnly "com.fyber.vamp:core-sdk:${vampVersion}"
     compileOnly "com.fyber.vamp:mraid-kit:${vampVersion}"
     compileOnly "com.fyber.vamp:video-kit:${vampVersion}"
